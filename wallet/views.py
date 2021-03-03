@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
+from transaction.models import Transaction
 from wallet.models import Wallet
 
 logger = logging.getLogger('walletmanager.logger')
@@ -73,6 +74,37 @@ def wallet_view(request):
             response_data['status'] = 'SUCCESS'
             response_data['data'] = {'wallet': wallet.get_dict()}
         return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
+
+
+@csrf_exempt
+@api_view(['GET', ])
+@permission_classes([IsAuthenticated])
+def reference_view(request):
+    response_data = {'status': '', 'data': {}, 'message': []}
+    customer = request.user
+    wallet = None
+    try:
+        wallet = Wallet.objects.get(customer=customer)
+    except ObjectDoesNotExist as e:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Unable to Generate ReferenceID. No Wallet Found.')
+        return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
+
+    if wallet.status is False:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Wallet is Disabled. Transaction not Permitted.')
+    else:
+        transaction = Transaction(wallet=wallet)
+        try:
+            transaction.save()
+            response_data['status'] = 'SUCCESS'
+            response_data['data'] = transaction.get_dict()
+            response_data['message'].append('Reference ID Generated for Transaction.')
+        except ValueError as e:
+            logger.error('Error in Save : DB Error' + str(e.args[0]))
+            response_data['status'] = 'FAILED'
+            response_data['message'].append('Database Error')
+    return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
 
 
 @csrf_exempt
