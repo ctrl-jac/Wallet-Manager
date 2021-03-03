@@ -11,6 +11,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from customer.forms import CreateCustomerForm
 from customer.models import Customer
+from wallet.models import Wallet
 
 logger = logging.getLogger('walletmanager.logger')
 JSON_PARAMS = {'indent': 2}
@@ -40,7 +41,10 @@ def register_view(request):
             raise ValidationError(validations[1])
         form = CreateCustomerForm(request_data)
         customer = form.save()
-        dto = {'username': customer.username, 'email': customer.email, 'customer_id': str(customer.cxid)}
+        wallet = Wallet(customer=customer)
+        wallet.save()
+        dto = {'username': customer.username, 'email': customer.email, 'customer_id': str(customer.cxid),
+               'wallet_id': str(wallet.wxid)}
         return JsonResponse(dto, json_dumps_params=JSON_PARAMS)
     except json.decoder.JSONDecodeError as e:
         logger.error('Error in Registration : Malformed Request Body ' + str(e.args[0]))
