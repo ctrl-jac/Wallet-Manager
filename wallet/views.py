@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
@@ -111,8 +112,82 @@ def reference_view(request):
 @api_view(['POST', ])
 @permission_classes([IsAuthenticated])
 def deposit_view(request):
-    response_data = {'status': '', 'data': {}}
-    pass
+    response_data = {'status': '', 'data': {}, 'message': []}
+    customer = request.user
+
+    amount = request.data.get('amount', None)
+    reference_id = request.data.get('reference_id', None)
+    if reference_id is None:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append("reference_id Missing.")
+
+    # Validate Amount
+    if amount is None:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append("amount Missing.")
+    else:
+        if not validate_int(amount):  # isinstance() not reliable, as isinstance("1") is false
+            response_data['status'] = 'FAILED'
+            response_data['message'].append("Invalid Amount Value. Should be Integer Value")
+        else:
+            if not int(amount) > 0:
+                response_data['status'] = 'FAILED'
+                response_data['message'].append("Amount should be greater than 0")
+
+    if not response_data['message']:
+        amount = int(amount)
+
+        wallet = fetch_wallet(customer, response_data)
+        if response_data['status'] == 'FAILED':
+            return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
+
+        transaction = fetch_transaction(wallet, reference_id, response_data)
+        if response_data['status'] == 'FAILED':
+            return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
+
+        transaction.amount = amount
+        transaction.type = 'DEPOSIT'
+        transaction.status = 'IP'
+        try:
+            transaction.save()
+            sleep(5)
+        except ValueError as e:
+            logger.error('Error in Deposit : DB Error <Attempted State = TRANSACTION_IN-PROGRESS>' + str(e.args[0]))
+            response_data['status'] = 'FAILED'
+            response_data['message'].append('Database Error')
+
+        try:
+            wallet.balance = wallet.balance + int(transaction.amount)
+            wallet.save()
+            try:
+                transaction.type = 'DX'
+                transaction.status = 'CMP'
+                transaction.save()
+                response_data['status'] = 'SUCCESS'
+                deposit = { "status": "success",
+                            "deposited_by": str(wallet.customer.cxid),
+                            "amount": str(amount),
+                            "reference_id": str(reference_id)
+                            }
+                response_data['data'] = deposit
+            except ValueError as e:
+                logger.error('Error in Deposit : DB Error <Attempted State = TRANSACTION_COMPLETE>' + str(e.args[0]))
+                response_data['status'] = 'FAILED'
+                response_data['message'].append('Database Error')
+        except ValueError as e:
+            logger.error('Error in Deposit : DB Error <Attempted State = WALLET_UPDATE>' + str(e.args[0]))
+            response_data['status'] = 'FAILED'
+            response_data['message'].append('Database Error')
+            try:
+                transaction.type = 'DEPOSIT'
+                transaction.status = 'ABORTED'
+                transaction.save()
+            except ValueError as e:
+                logger.error('Error in Deposit : DB Error <Attempted State = TRANSACTION_ABORT>' + str(e.args[0]))
+                response_data['status'] = 'FAILED'
+                response_data['message'].append('Database Error')
+
+    return JsonResponse(response_data, json_dumps_params=JSON_PARAMS)
 
 
 @csrf_exempt
@@ -123,9 +198,35 @@ def withdrawal_view(request):
     pass
 
 
+def fetch_wallet(customer, response_data):
+    wallet = None
+    try:
+        wallet = Wallet.objects.get(customer=customer)
+    except ObjectDoesNotExist as e:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Unable to Deposit. No Wallet Found.')
+    if wallet.status is False:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Wallet is Disabled. Deposit not Permitted.')
+    return wallet
 
 
+def fetch_transaction(wallet, reference_id, response_data):
+    transaction = None
+    try:
+        transaction = Transaction.objects.get(wallet=wallet, reference_id=reference_id)
+    except ObjectDoesNotExist as e:
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Unable to Fetch Transaction. Wallet & Reference ID Mismatch.')
+    if transaction and not transaction.status == 'INIT':
+        response_data['status'] = 'FAILED'
+        response_data['message'].append('Transaction Attempted with Given Reference ID')
+    return transaction
 
 
-
-
+def validate_int(amount):
+    try:
+        val = int(amount)
+    except ValueError as e:
+        return False
+    return True
