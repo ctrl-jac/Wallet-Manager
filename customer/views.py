@@ -40,7 +40,7 @@ def register_view(request):
             raise ValidationError(validations[1])
         form = CreateCustomerForm(request_data)
         customer = form.save()
-        dto = {'username': customer.username, 'email': customer.email, 'customer_xid': str(customer.cxid)}
+        dto = {'username': customer.username, 'email': customer.email, 'customer_id': str(customer.cxid)}
         return JsonResponse(dto, json_dumps_params=JSON_PARAMS)
     except json.decoder.JSONDecodeError as e:
         logger.error('Error in Registration : Malformed Request Body ' + str(e.args[0]))
