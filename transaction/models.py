@@ -11,9 +11,10 @@ class Transaction(models.Model):
     id = models.BigAutoField(primary_key=True)
     reference_id = models.UUIDField(unique=True, default=uuid.uuid4)
     created_at = models.DateTimeField(default=timezone.now)
+    transaction_time = models.DateTimeField(default=timezone.now)
     wallet = models.ForeignKey(Wallet, blank=False, null=False, on_delete=models.CASCADE, db_column='wid')
     amount = models.PositiveIntegerField(default=0)
-    status = models.CharField(max_length=10, choices=TX_STATUS, default='INIT')
+    status = models.CharField(max_length=20, choices=TX_STATUS, default='INIT')
     type = models.CharField(max_length=20, choices=TX_TYPE, default='US')
 
     class Meta:

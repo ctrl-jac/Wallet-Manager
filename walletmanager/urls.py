@@ -9,5 +9,5 @@ urlpatterns = [
     path('api/v1/wallet', wallet_view, name='wallet'),
     path('api/v1/wallet/reference', reference_view, name='reference-id'),
     path('api/v1/wallet/deposit', deposit_view, name='deposit'),
-    path('api/v1/wallet/withdrawal', withdrawal_view, name='withdrawal'),
+    path('api/v1/wallet/withdraw', withdrawal_view, name='withdrawal'),
 ]
